@@ -138,7 +138,7 @@ function extract_source_single {
             git --git-dir "${workspace}/${file_name}" --work-tree="${srcdir}" restore --source="${restore_source}" .
             ;;
         *)
-            ln --symbolic $(realpath "${file_name}") "${srcdir}/${file_name}"
+            ln --symbolic $(realpath "${workspace}/${file_name}") "${srcdir}/${file_name}"
             decompress_source_file "${file_name}"
             ;;
     esac
@@ -178,51 +178,6 @@ function decompress_source_file {
             $cmd -dcf -- "$file" > "${srcdir}/${file%.*}" || res=$?
             ;;
     esac
-
-    # local ext="${file##*.}"
-    # local file_type="$(file --no-sandbox --brief --mime --uncompress "${file}")"
-    # case "$file_type" in
-    #     *application/x-tar*|*application/zip*|*application/x-zip*)
-    #         cmd="tar" ;;
-    #     *application/x-gzip*|*application/gzip*)
-    #         case "$ext" in
-    #             gz|z|Z) cmd="gzip" ;;
-    #             *) return;;
-    #         esac ;;
-    #     *application/x-bzip*)
-    #         case "$ext" in
-    #             bz2|bz) cmd="bzip2" ;;
-    #             *) return;;
-    #         esac ;;
-    #     *application/x-xz*)
-    #         case "$ext" in
-    #             xz) cmd="xz" ;;
-    #             *) return;;
-    #         esac ;;
-    #     *application/zstd*)
-    #         case "$ext" in
-    #             zst) cmd="zstd" ;;
-    #             *) return;;
-    #         esac ;;
-    #     *)
-    #         msg2 "No need to decompress, skip %s" "${file}"
-    #         return
-    #         ;;
-    # esac
-
-	# local ret=0
-	# msg2 "$(gettext "Extracting %s with %s")" "$file" "$cmd"
-	# if [[ $cmd = "tar" ]]; then
-	# 	$cmd -xf "$file" --directory="${srcdir}" || ret=$?
-	# else
-	# 	rm -f -- "${file%.*}"
-	# 	$cmd -dcf -- "$file" > "${srcdir}/${file%.*}" || ret=$?
-	# fi
-	# if (( ret )); then
-    #     err "Failed to extract %s" "$file"
-    #     err "Aborting..."
-	# 	exit 1
-	# fi
 }
 
 function is_function {
@@ -234,11 +189,11 @@ function is_function {
 ## Here start the build logic
 ##
 
-while (( $# >= 1 )); do
+while (( "$#" >= 1 )); do
     case "$1" in
         -F)  FAKE_PACKAGE=1 ;;
         -OS) OVERRIDE_SOURCE=1 ;;
-        -OV) OVERRIDE_VERSION=$2; shift ;;
+        -OV) OVERRIDE_VERSION="$2"; shift ;;
         *)   err "Unkown option $1"; break ;;
     esac
     shift
@@ -263,30 +218,31 @@ if (( FAKE_PACKAGE )); then
     exit $?
 fi
 
-ACTION="cleaning"; msg "${ACTION}..."
-rm -rf "${srcdir}" "${pkgdir}"
-
-mkdir -p ${srcdir} ${pkgdir}
-
-ACTION="retrieving source"; msg "${ACTION}..."
+# check if all source is valid
 for s in "${source[@]}"; do
-    if grep "::" <<< "$s" > /dev/null; then
-        file_name="${s%%::*}"
-        url="${s##*::}"
-    else
+    if ! grep "::" <<< "$s" > /dev/null; then
         err "source must contain \"::\" to specify file name"
         exit 1
     fi
+done
+
+ACTION="cleaning $$srcdir and $$pkgdir"; msg "${ACTION}..."
+rm -rf "${srcdir}" "${pkgdir}"
+
+mkdir -p "${srcdir}" "${pkgdir}"
+
+ACTION="retrieving source"; msg "${ACTION}..."
+for s in "${source[@]}"; do
+    file_name="${s%%::*}"
+    url="${s##*::}"
 
     retrive_source_single "${file_name}" "${url}"
 done
 
 ACTION="extracting source"; msg "${ACTION}..."
 for s in "${source[@]}"; do
-    if grep "::" <<< "$s" > /dev/null; then
-        file_name="${s%%::*}"
-        url="${s##*::}"
-    fi
+    file_name="${s%%::*}"
+    url="${s##*::}"
 
     extract_source_single "${file_name}" "${url}"
 done
@@ -307,7 +263,7 @@ fi
 
 ACTION="generating control"; msg "${ACTION}..."
 mkdir -p "${pkgdir}/DEBIAN"
-echo 9 > "${pkgdir}/DEBIAN/compat"
+echo 2 > "${pkgdir}/DEBIAN/compat"
 debian_control > "${pkgdir}/DEBIAN/control"
 
 function debian_hooks_warpper { is_function "$1" && "$1" > "$2" && chmod +x "$2" || true; }
