@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 
-WORKSPACE=$(pwd -P)
+workspace=$(pwd -P)
 
-export srcdir="${WORKSPACE}/src"
-export pkgdir="${WORKSPACE}/pkg"
+export srcdir="${workspace}/src"
+export pkgdir="${workspace}/pkg"
 
 FAKE_PACKAGE=0
 OVERRIDE_SOURCE=0
 OVERRIDE_VERSION=""
 ACTION=""
 
+
+set -o nounset
+set -o errtrace
+set -o errexit
+function err_occur { err "Build aborted in: %s" "$ACTION" ; }
+trap err_occur ERR
 
 # prefer terminal safe colored and bold text when tput is supported
 if tput setaf 0 &>/dev/null; then
@@ -43,7 +49,6 @@ function err {
 }
 
 
-
 function debian_control {
     local install_size="$(du --bytes --summarize ${pkgdir} | cut -d $'\t' -f 1)"
 
@@ -58,18 +63,22 @@ EOF
 }
 
 function generate_deb {
-    (
-        find "${pkgdir}" -mindepth 1 -not -type d -not -path "${pkgdir}/DEBIAN*" -printf "%P\n" |
-            tar -czf data.tar.gz -C "${pkgdir}" -T -
+    local tmpdir="$(mktemp --directory)"
+    local data_tgz="${tmpdir}/data.tar.gz"
+    local control_tgz="${tmpdir}/control.tar.gz"
+    local debian_binary="${tmpdir}/debian_binary"
 
-        find "${pkgdir}/DEBIAN" -mindepth 1 -not -type d -printf "%P\n" |
-            tar -czf control.tar.gz -C "${pkgdir}/DEBIAN" -T -
+    find "${pkgdir}" -mindepth 1 -not -type d -not -path "${pkgdir}/DEBIAN*" -printf "%P\n" |
+        tar -czf "${data_tgz}" -C "${pkgdir}" -T -
 
-        echo 2.0 > debian-binary
+    find "${pkgdir}/DEBIAN" -mindepth 1 -not -type d -printf "%P\n" |
+        tar -czf "${control_tgz}" -C "${pkgdir}/DEBIAN" -T -
 
-        ar r "${pkgname}${pkgver:+-}${pkgver}.deb" debian-binary control.tar.gz data.tar.gz
-        rm debian-binary control.tar.gz data.tar.gz
-    )
+    echo 2.0 > "${debian_binary}"
+
+    ar r "${pkgname}${pkgver:+-}${pkgver}.deb" "${debian_binary}" "${control_tgz}" "${data_tgz}"
+
+    rm -rf "${tmpdir}"
 }
 
 function url_type {
@@ -97,16 +106,16 @@ function retrive_source_single {
     case "$(url_type "${url}")" in
         "git")
             if [[ -d "${file_name}" ]]; then
-                git --git-dir="${WORKSPACE}/${file_name}" --work-tree="${srcdir}" pull
+                git --git-dir="${workspace}/${file_name}" --work-tree="${srcdir}" pull
             else
-                git clone --bare "${url##git+}" "${WORKSPACE}/${file_name}"
+                git clone --bare "${url##git+}" "${workspace}/${file_name}"
             fi
             ;;
         "http"|"https")
-            if (( ! OVERRIDE_SOURCE )) && [[ -f "${WORKSPACE}/${file_name}" ]] ; then
+            if (( ! OVERRIDE_SOURCE )) && [[ -f "${workspace}/${file_name}" ]] ; then
                 msg2 "${file_name} already exists, skip download"
             else
-                curl --location "${url}" --output "${WORKSPACE}/${file_name}"
+                curl --location "${url}" --output "${workspace}/${file_name}"
             fi
             ;;
     esac
@@ -120,7 +129,7 @@ function extract_source_single {
     case "${url_type}" in
         "git")
             local restore_source=HEAD
-            git --git-dir "${WORKSPACE}/${file_name}" --work-tree="${srcdir}" restore --source="${restore_source}" .
+            git --git-dir "${workspace}/${file_name}" --work-tree="${srcdir}" restore --source="${restore_source}" .
             ;;
         *)
             ln --symbolic $(realpath "${file_name}") "${srcdir}/${file_name}"
@@ -215,11 +224,6 @@ function is_function {
 }
 
 
-set -o errtrace
-set -o errexit
-function err_occur { err "Build aborted in: %s" "$ACTION" ; }
-trap err_occur ERR
-
 ##
 ## Here start the build logic
 ##
@@ -234,7 +238,7 @@ while (( $# >= 1 )); do
     shift
 done
 
-source "${WORKSPACE}/DEBBUILD"
+source "${workspace}/DEBBUILD"
 
 # Run package and generate deb and exit
 if (( FAKE_PACKAGE )); then
