@@ -15,8 +15,13 @@ set -o functrace
 set -o nounset
 set -o errtrace
 set -o errexit
-function err_occur { err "Build aborted in: %s" "$ACTION" ; err "Failed at $1: $2"; }
-trap 'err_occur "${LINENO}" "${BASH_COMMAND}"' ERR
+
+function err_occur {
+    err "Build aborted in: %s" "${ACTION}"
+    err "Failed at $1: ${BASH_COMMAND}"
+    err "Trace line number: %s" "$*"
+}
+trap 'err_occur "${LINENO}" "${BASH_LINENO[@]}"' ERR
 
 # prefer terminal safe colored and bold text when tput is supported
 if tput setaf 0 &>/dev/null; then
