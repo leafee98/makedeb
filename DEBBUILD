@@ -1,0 +1,29 @@
+#/usr/bin/env bash
+
+pkgname="forgejo"
+pkgrel=1
+pkgdesc="A painless selfhost git service."
+url="https://codeberg.org/forgejo/forgejo"
+maintainer="Leafee98 <me@leafee98.com>"
+
+source=(
+    "forgejo-1.19.0-2-linux-amd64.xz::https://codeberg.org/attachments/5f7f9d36-b85e-40db-b390-9bf39acbbbc5"
+    "bwifi.git::git+https://cgit.leafee98.com/bwifi.git/"
+    "frp-0.46.1.tar.gz::frp-0.46.1.tar.gz"
+    "pkg.zip::pkg.zip"
+    "t.sh::t.sh"
+)
+
+function pkgver {
+    echo "0.0.2"
+}
+
+function build {
+    install -D "${srcdir}/t.sh" "${pkgdir}/usr/bin/t.sh"
+    echo "building"
+}
+
+function package {
+    echo "installing package, pkgdir: ${pkgdir}"
+}
+

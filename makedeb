@@ -1,0 +1,319 @@
+#!/usr/bin/env bash
+
+WORKSPACE=$(pwd -P)
+
+export srcdir="${WORKSPACE}/src/"
+export pkgdir="${WORKSPACE}/pkg/"
+
+FAKE_PACKAGE=0
+OVERRIDE_SOURCE=0
+OVERRIDE_VERSION=""
+ACTION=""
+
+
+# prefer terminal safe colored and bold text when tput is supported
+if tput setaf 0 &>/dev/null; then
+    ALL_OFF="$(tput sgr0)"
+    BOLD="$(tput bold)"
+    BLUE="${BOLD}$(tput setaf 4)"
+    GREEN="${BOLD}$(tput setaf 2)"
+    RED="${BOLD}$(tput setaf 1)"
+    YELLOW="${BOLD}$(tput setaf 3)"
+else
+    ALL_OFF="\e[0m"
+    BOLD="\e[1m"
+    BLUE="${BOLD}\e[34m"
+    GREEN="${BOLD}\e[32m"
+    RED="${BOLD}\e[31m"
+    YELLOW="${BOLD}\e[33m"
+fi
+readonly ALL_OFF BOLD BLUE GREEN RED YELLOW
+
+function msg {
+    local mesg=$1; shift
+    printf "${GREEN}==>${ALL_OFF}${BOLD} ${mesg}${ALL_OFF}\n" "$@"
+}
+function msg2 {
+    local mesg=$1; shift
+    printf "${BLUE}  ->${ALL_OFF}${BOLD} ${mesg}${ALL_OFF}\n" "$@"
+}
+function err {
+    local mesg=$1; shift
+    printf "${RED}  ->${ALL_OFF}${BOLD}${RED} ${mesg}${ALL_OFF}\n" "$@" >&2
+}
+
+
+
+function debian_control {
+    local install_size="$(du --bytes --summarize ${pkgdir} | cut -d $'\t' -f 1)"
+
+    cat << EOF | envsubst
+Package: ${pkgname}
+Version: ${pkgver}
+Architecture: all
+Maintainer: ${maintainer}
+Installed-Size: ${install_size}
+Description: ${pkgdesc}
+EOF
+}
+
+function generate_deb {
+    (
+        cd "${pkgdir}"
+        tar czf ../data.tar.gz [a-z]*
+        cd  DEBIAN
+        tar czf ../../control.tar.gz *
+        cd ../..
+        echo 2.0 > debian-binary
+        ar r "${pkgname}${pkgver:+-}${pkgver}.deb" debian-binary control.tar.gz data.tar.gz
+        rm debian-binary control.tar.gz data.tar.gz
+    )
+}
+
+function url_type {
+    if [[ "${url}" == git+* ]] ; then
+        echo "git"
+    elif [[ "${url}" == http://* ]] ; then
+        echo "http"
+    elif [[ "${url}" == https://* ]] ; then
+        echo "https"
+    elif [[ "${url}" == "file//*" ]]; then
+        echo "file"
+    elif [[ "${url}" != "*://*" ]] ; then
+        echo "file"
+    else
+        err "Unkown url schema: %s" "${url}"
+        err "Aborting..."
+        exit 1
+    fi
+}
+
+function retrive_source_single {
+    local file_name="$1"
+    local url="$2"
+
+    case "$(url_type "${url}")" in
+        "git")
+            if [[ -d "${file_name}" ]]; then
+                git --git-dir="${WORKSPACE}/${file_name}" --work-tree="${srcdir}" pull
+            else
+                git clone --bare "${url##git+}" "${WORKSPACE}/${file_name}"
+            fi
+            ;;
+        "http"|"https")
+            if (( ! OVERRIDE_SOURCE )) && [[ -f "${WORKSPACE}/${file_name}" ]] ; then
+                msg2 "${file_name} already exists, skip download"
+            else
+                curl --location "${url}" --output "${WORKSPACE}/${file_name}"
+            fi
+            ;;
+    esac
+}
+
+function extract_source_single {
+    local file_name="$1"
+    local url="$2"
+    local url_type="$(url_type "${url}")"
+
+    case "${url_type}" in
+        "git")
+            local restore_source=HEAD
+            git --git-dir "${WORKSPACE}/${file_name}" --work-tree="${srcdir}" restore --source="${restore_source}" .
+            ;;
+        *)
+            ln --symbolic $(realpath "${file_name}") "${srcdir}/${file_name}"
+            decompress_source_file "${file_name}"
+            ;;
+    esac
+}
+
+function decompress_source_file {
+    local file="$1"
+    case "${file}" in
+        *.tar|*.tar.gz|*.tgz|*.tar.Z|*.tar.bz2|*.tbz2|*.tar.lz|*.tlz|*.tar.xz|*.txz|*.tar.zst)
+            cmd="tar" ;;
+        *.gz|*.z|*.Z)
+            cmd="gzip" ;;
+        *.bz2|*.bz)
+            cmd="bzip2" ;;
+        *.xz)
+            cmd="xz" ;;
+        *.zst|*.zstd)
+            cmd="zstd" ;;
+        *.zip)
+            cmd="unzip" ;;
+        *)
+            msg2 "No need to decompress, skip %s" "${file}"
+            return
+    esac
+
+    msg2 "Decompressing %s with %s" "${file}" "${cmd}"
+    local res=0
+    case "$cmd" in
+        "tar")
+            $cmd -xf "$file" --directory="${srcdir}" || res=$?
+            ;;
+        "unzip")
+            $cmd "$file" -d "${srcdir}" || res=$?
+            ;;
+        *)
+            rm -f -- "${file%.*}"
+            $cmd -dcf -- "$file" > "${srcdir}/${file%.*}" || res=$?
+            ;;
+    esac
+
+    # local ext="${file##*.}"
+    # local file_type="$(file --no-sandbox --brief --mime --uncompress "${file}")"
+    # case "$file_type" in
+    #     *application/x-tar*|*application/zip*|*application/x-zip*)
+    #         cmd="tar" ;;
+    #     *application/x-gzip*|*application/gzip*)
+    #         case "$ext" in
+    #             gz|z|Z) cmd="gzip" ;;
+    #             *) return;;
+    #         esac ;;
+    #     *application/x-bzip*)
+    #         case "$ext" in
+    #             bz2|bz) cmd="bzip2" ;;
+    #             *) return;;
+    #         esac ;;
+    #     *application/x-xz*)
+    #         case "$ext" in
+    #             xz) cmd="xz" ;;
+    #             *) return;;
+    #         esac ;;
+    #     *application/zstd*)
+    #         case "$ext" in
+    #             zst) cmd="zstd" ;;
+    #             *) return;;
+    #         esac ;;
+    #     *)
+    #         msg2 "No need to decompress, skip %s" "${file}"
+    #         return
+    #         ;;
+    # esac
+
+	# local ret=0
+	# msg2 "$(gettext "Extracting %s with %s")" "$file" "$cmd"
+	# if [[ $cmd = "tar" ]]; then
+	# 	$cmd -xf "$file" --directory="${srcdir}" || ret=$?
+	# else
+	# 	rm -f -- "${file%.*}"
+	# 	$cmd -dcf -- "$file" > "${srcdir}/${file%.*}" || ret=$?
+	# fi
+	# if (( ret )); then
+    #     err "Failed to extract %s" "$file"
+    #     err "Aborting..."
+	# 	exit 1
+	# fi
+}
+
+function is_function {
+    declare -F "$1" > /dev/null
+}
+
+
+set -o errtrace
+set -o errexit
+function err_occur { err "Build aborted in: %s" "$ACTION" ; }
+trap err_occur ERR
+
+##
+## Here start the build logic
+##
+
+while (( $# >= 1 )); do
+    case "$1" in
+        -F)  FAKE_PACKAGE=1 ;;
+        -OS) OVERRIDE_SOURCE=1 ;;
+        -OV) OVERRIDE_VERSION=$2; shift ;;
+        *)   err "Unkown option $1"; break ;;
+    esac
+    shift
+done
+
+source "${WORKSPACE}/DEBBUILD"
+
+# Run package and generate deb and exit
+if (( FAKE_PACKAGE )); then
+    # version passed directly from parent shell
+    if [[ -n "${OVERRIDE_VERSION}" ]] ; then
+        pkgver="${OVERRIDE_VERSION}"
+    fi
+
+    if is_function package; then
+        ACTION="package"
+        msg "run custom function: %s..." "package"
+        package
+    fi
+
+    ACTION="generating deb"
+    msg "generating deb package..."
+    generate_deb
+    exit $?
+fi
+
+ACTION="clean"
+msg "cleaning..."
+rm -rf "${srcdir}" "${pkgdir}"
+
+mkdir -p ${srcdir} ${pkgdir}
+
+ACTION="retrieve source"
+msg "retrieving source..."
+for s in "${source[@]}"; do
+    if grep "::" <<< "$s" > /dev/null; then
+        file_name="${s%%::*}"
+        url="${s##*::}"
+    else
+        err "source must contain \"::\" to specify file name"
+        exit 1
+    fi
+
+    retrive_source_single "${file_name}" "${url}"
+done
+msg "extracting source..."
+for s in "${source[@]}"; do
+    if grep "::" <<< "$s" > /dev/null; then
+        file_name="${s%%::*}"
+        url="${s##*::}"
+    fi
+
+    extract_source_single "${file_name}" "${url}"
+done
+
+if is_function build; then
+    ACTION="build"
+    msg "run custom function: %s..." "build"
+    build
+fi
+
+ACTION="pkgver"
+if [[ -n "${OVERRIDE_VERSION}" ]] ; then
+    msg "Using override version: %s" "${OVERRIDE_VERSION}"
+    pkgver="${OVERRIDE_VERSION}"
+elif is_function pkgver; then
+    msg "run custom function: %s..." "pkgver"
+    pkgver="$(pkgver)"
+fi
+
+ACTION="generate control"
+msg "generating control..."
+mkdir -p "${pkgdir}/DEBIAN"
+echo 9 > "${pkgdir}/DEBIAN/compat"
+debian_control > "${pkgdir}/DEBIAN/control"
+
+function debian_hooks_warpper { is_function "$1" && "$1" > "$2" && chmod +x "$2" || true; }
+debian_hooks_warpper debian_preinst  ${pkgdir}/DEBIAN/preinst
+debian_hooks_warpper debian_postinst ${pkgdir}/DEBIAN/postinst
+debian_hooks_warpper debian_prerm    ${pkgdir}/DEBIAN/prerm
+debian_hooks_warpper debian_postrm   ${pkgdir}/DEBIAN/postrm
+
+if is_function package; then
+    # recursive call self to run package in fakeroot
+    msg "Entering fakeroot environment..."
+    fakeroot -- bash -$- "${BASH_SOURCE[0]}" -F -OV "${pkgver}"  "${ARGLIST[@]}" || exit $?
+    msg "Leaving fakeroot environment..."
+fi
+
+msg "Builds has done"
