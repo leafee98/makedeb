@@ -11,11 +11,12 @@ OVERRIDE_VERSION=""
 ACTION=""
 
 
+set -o functrace
 set -o nounset
 set -o errtrace
 set -o errexit
-function err_occur { err "Build aborted in: %s" "$ACTION" ; }
-trap err_occur ERR
+function err_occur { err "Build aborted in: %s" "$ACTION" ; err "Failed at $1: $2"; }
+trap 'err_occur "${LINENO}" "${BASH_COMMAND}"' ERR
 
 # prefer terminal safe colored and bold text when tput is supported
 if tput setaf 0 &>/dev/null; then
@@ -248,25 +249,21 @@ if (( FAKE_PACKAGE )); then
     fi
 
     if is_function package; then
-        ACTION="package"
-        msg "run custom function: %s..." "package"
+        ACTION="custom package"; msg "run function: %s..." "${ACTION}"
         package
     fi
 
-    ACTION="generating deb"
-    msg "generating deb package..."
+    ACTION="generating deb package"; msg "${ACTION}..."
     generate_deb
     exit $?
 fi
 
-ACTION="clean"
-msg "cleaning..."
+ACTION="cleaning"; msg "${ACTION}..."
 rm -rf "${srcdir}" "${pkgdir}"
 
 mkdir -p ${srcdir} ${pkgdir}
 
-ACTION="retrieve source"
-msg "retrieving source..."
+ACTION="retrieving source"; msg "${ACTION}..."
 for s in "${source[@]}"; do
     if grep "::" <<< "$s" > /dev/null; then
         file_name="${s%%::*}"
@@ -278,7 +275,8 @@ for s in "${source[@]}"; do
 
     retrive_source_single "${file_name}" "${url}"
 done
-msg "extracting source..."
+
+ACTION="extracting source"; msg "${ACTION}..."
 for s in "${source[@]}"; do
     if grep "::" <<< "$s" > /dev/null; then
         file_name="${s%%::*}"
@@ -289,22 +287,20 @@ for s in "${source[@]}"; do
 done
 
 if is_function build; then
-    ACTION="build"
-    msg "run custom function: %s..." "build"
+    ACTION="custom build"; msg "run function: %s..." "${ACTION}"
     build
 fi
 
-ACTION="pkgver"
+ACTION="custom pkgver";
 if [[ -n "${OVERRIDE_VERSION}" ]] ; then
     msg "Using override version: %s" "${OVERRIDE_VERSION}"
     pkgver="${OVERRIDE_VERSION}"
 elif is_function pkgver; then
-    msg "run custom function: %s..." "pkgver"
+    msg "run function: %s..." "${ACTION}"
     pkgver="$(pkgver)"
 fi
 
-ACTION="generate control"
-msg "generating control..."
+ACTION="generating control"; msg "${ACTION}..."
 mkdir -p "${pkgdir}/DEBIAN"
 echo 9 > "${pkgdir}/DEBIAN/compat"
 debian_control > "${pkgdir}/DEBIAN/control"
