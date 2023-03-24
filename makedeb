@@ -72,7 +72,7 @@ function generate_deb {
     local tmpdir="$(mktemp --directory)"
     local data_tgz="${tmpdir}/data.tar.gz"
     local control_tgz="${tmpdir}/control.tar.gz"
-    local debian_binary="${tmpdir}/debian_binary"
+    local debian_binary="${tmpdir}/debian-binary"
 
     find "${pkgdir}" -mindepth 1 -not -type d -not -path "${pkgdir}/DEBIAN*" -printf "%P\n" |
         tar -czf "${data_tgz}" -C "${pkgdir}" -T -
