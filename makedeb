@@ -2,8 +2,8 @@
 
 WORKSPACE=$(pwd -P)
 
-export srcdir="${WORKSPACE}/src/"
-export pkgdir="${WORKSPACE}/pkg/"
+export srcdir="${WORKSPACE}/src"
+export pkgdir="${WORKSPACE}/pkg"
 
 FAKE_PACKAGE=0
 OVERRIDE_SOURCE=0
@@ -59,12 +59,14 @@ EOF
 
 function generate_deb {
     (
-        cd "${pkgdir}"
-        tar czf ../data.tar.gz [a-z]*
-        cd  DEBIAN
-        tar czf ../../control.tar.gz *
-        cd ../..
+        find "${pkgdir}" -mindepth 1 -not -type d -not -path "${pkgdir}/DEBIAN*" -printf "%P\n" |
+            tar -czf data.tar.gz -C "${pkgdir}" -T -
+
+        find "${pkgdir}/DEBIAN" -mindepth 1 -not -type d -printf "%P\n" |
+            tar -czf control.tar.gz -C "${pkgdir}/DEBIAN" -T -
+
         echo 2.0 > debian-binary
+
         ar r "${pkgname}${pkgver:+-}${pkgver}.deb" debian-binary control.tar.gz data.tar.gz
         rm debian-binary control.tar.gz data.tar.gz
     )
