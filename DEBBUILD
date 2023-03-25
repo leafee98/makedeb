@@ -8,10 +8,10 @@ maintainer="Leafee98 <me@leafee98.com>"
 
 source=(
     "forgejo-1.19.0-2-linux-amd64.xz::https://codeberg.org/attachments/5f7f9d36-b85e-40db-b390-9bf39acbbbc5"
-    "bwifi.git::git+https://cgit.leafee98.com/bwifi.git/"
-    "frp-0.46.1.tar.gz::frp-0.46.1.tar.gz"
-    "pkg.zip::pkg.zip"
-    "t.sh::t.sh"
+    "bwifi::git+https://cgit.leafee98.com/bwifi.git/"
+    "frp-0.46.1.tar.gz::material/frp-0.46.1.tar.gz"
+    "pkg.zip::material/pkg.zip"
+    "t.sh::material/t.sh"
 )
 
 function pkgver {
