@@ -94,9 +94,9 @@ function url_type {
         echo "http"
     elif [[ "${url}" == https://* ]] ; then
         echo "https"
-    elif [[ "${url}" == "file//*" ]]; then
+    elif [[ "${url}" == file//* ]]; then
         echo "file"
-    elif [[ "${url}" != "*://*" ]] ; then
+    elif [[ "${url}" != *://* ]] ; then
         echo "file"
     else
         err "Unkown url schema: %s" "${url}"
@@ -138,7 +138,7 @@ function extract_source_single {
             git --git-dir "${workspace}/${file_name}" --work-tree="${srcdir}" restore --source="${restore_source}" .
             ;;
         *)
-            ln --symbolic $(realpath "${workspace}/${url}") "${srcdir}/${file_name}"
+            ln --symbolic $(realpath "${workspace}/${file_name}") "${srcdir}/${file_name}"
             decompress_source_file "${file_name}"
             ;;
     esac
