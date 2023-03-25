@@ -105,6 +105,23 @@ function url_type {
     fi
 }
 
+function create_soft_link {
+    local src="$1"
+    local tgt="$2"
+
+    if [[ ! -e "${src}" ]] ; then
+        err "soft_link src %s not exist" "${src}"
+    fi
+
+    if [[ -e "${tgt}" ]] ; then
+        err "soft_link tgt %s already exist" "${tgt}"
+    fi
+
+    ln --symbolic "${src}" "${tgt}"
+}
+
+# $1 is relative path to file
+# $2 is url/(relative path to materials)
 function retrive_source_single {
     local file_name="$1"
     local url="$2"
@@ -112,7 +129,8 @@ function retrive_source_single {
     case "$(url_type "${url}")" in
         "git")
             if [[ -d "${file_name}" ]]; then
-                git --git-dir="${workspace}/${file_name}" --work-tree="${srcdir}" pull
+                [[ -d "${srcdir}/${file_name}" ]] || mkdir -p "${srcdir}/${file_name}"
+                git --git-dir="${workspace}/${file_name}" --work-tree="${srcdir}/${file_name}" pull
             else
                 git clone --bare "${url##git+}" "${workspace}/${file_name}"
             fi
@@ -127,6 +145,8 @@ function retrive_source_single {
     esac
 }
 
+# $1 is relative path to file
+# $2 is url/(relative path to materials)
 function extract_source_single {
     local file_name="$1"
     local url="$2"
@@ -137,13 +157,18 @@ function extract_source_single {
             local restore_source=HEAD
             git --git-dir "${workspace}/${file_name}" --work-tree="${srcdir}" restore --source="${restore_source}" .
             ;;
-        *)
-            ln --symbolic $(realpath "${workspace}/${file_name}") "${srcdir}/${file_name}"
-            decompress_source_file "${file_name}"
+        "file") # for material files, just soft-link under src
+            create_soft_link $(realpath "${workspace}/${url}") "${srcdir}/${file_name}"
+            decompress_source_file "${srcdir}/${file_name}"
+            ;;
+        *)      # for downloaded files, just soft-link downloaded file under src
+            create_soft_link $(realpath "${workspace}/${file_name}") "${srcdir}/${file_name}"
+            decompress_source_file "${srcdir}/${file_name}"
             ;;
     esac
 }
 
+# $1 is real path to file
 function decompress_source_file {
     local file="$1"
     case "${file}" in
@@ -175,7 +200,7 @@ function decompress_source_file {
             ;;
         *)
             rm -f -- "${file%.*}"
-            $cmd -dcf -- "$file" > "${srcdir}/${file%.*}" || res=$?
+            $cmd -dcf -- "$file" > "${file%.*}" || res=$?
             ;;
     esac
 }
