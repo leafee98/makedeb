@@ -251,7 +251,7 @@ for s in "${source[@]}"; do
     fi
 done
 
-ACTION="cleaning $$srcdir and $$pkgdir"; msg "${ACTION}..."
+ACTION="cleaning \$srcdir and \$pkgdir"; msg "${ACTION}..."
 rm -rf "${srcdir}" "${pkgdir}"
 
 mkdir -p "${srcdir}" "${pkgdir}"
