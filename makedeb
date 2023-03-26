@@ -56,7 +56,7 @@ function err {
 
 
 function debian_control {
-    local install_size="$(du --bytes --summarize ${pkgdir} | cut -d $'\t' -f 1)"
+    local install_size="$(du --block-size=1K --summarize ${pkgdir} | cut -d $'\t' -f 1)"
 
     cat << EOF | envsubst
 Package: ${pkgname}
@@ -238,6 +238,19 @@ if (( FAKE_PACKAGE )); then
         package
     fi
 
+
+    ACTION="generating control info"; msg "${ACTION}..."
+    mkdir -p "${pkgdir}/DEBIAN"
+    echo 2 > "${pkgdir}/DEBIAN/compat"
+    debian_control > "${pkgdir}/DEBIAN/control"
+
+    function debian_hooks_warpper { is_function "$1" && "$1" > "$2" && chmod +x "$2" || true; }
+    debian_hooks_warpper debian_preinst  ${pkgdir}/DEBIAN/preinst
+    debian_hooks_warpper debian_postinst ${pkgdir}/DEBIAN/postinst
+    debian_hooks_warpper debian_prerm    ${pkgdir}/DEBIAN/prerm
+    debian_hooks_warpper debian_postrm   ${pkgdir}/DEBIAN/postrm
+
+
     ACTION="generating deb package"; msg "${ACTION}..."
     generate_deb
     exit $?
@@ -286,22 +299,9 @@ elif is_function pkgver; then
     pkgver="$(pkgver)"
 fi
 
-ACTION="generating control"; msg "${ACTION}..."
-mkdir -p "${pkgdir}/DEBIAN"
-echo 2 > "${pkgdir}/DEBIAN/compat"
-debian_control > "${pkgdir}/DEBIAN/control"
-
-function debian_hooks_warpper { is_function "$1" && "$1" > "$2" && chmod +x "$2" || true; }
-debian_hooks_warpper debian_preinst  ${pkgdir}/DEBIAN/preinst
-debian_hooks_warpper debian_postinst ${pkgdir}/DEBIAN/postinst
-debian_hooks_warpper debian_prerm    ${pkgdir}/DEBIAN/prerm
-debian_hooks_warpper debian_postrm   ${pkgdir}/DEBIAN/postrm
-
-if is_function package; then
-    # recursive call self to run package in fakeroot
-    msg "Entering fakeroot environment..."
-    fakeroot -- bash -$- "${BASH_SOURCE[0]}" -F -OV "${pkgver}"  "${ARGLIST[@]}" || exit $?
-    msg "Leaving fakeroot environment..."
-fi
+# recursive call self to run rest task in fakeroot
+msg "Entering fakeroot environment..."
+fakeroot -- bash -$- "${BASH_SOURCE[0]}" -F -OV "${pkgver}"  "${ARGLIST[@]}" || exit $?
+msg "Leaving fakeroot environment..."
 
 msg "Builds has done"
