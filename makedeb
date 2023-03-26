@@ -94,6 +94,10 @@ function url_type {
         echo "http"
     elif [[ "${url}" == https://* ]] ; then
         echo "https"
+    elif [[ "${url}" == ftp://* ]] ; then
+        echo "ftp"
+    elif [[ "${url}" == ftps://* ]] ; then
+        echo "ftps"
     elif [[ "${url}" == file//* ]]; then
         echo "file"
     elif [[ "${url}" != *://* ]] ; then
@@ -129,19 +133,34 @@ function retrive_source_single {
     case "$(url_type "${url}")" in
         "git")
             if [[ -d "${file_name}" ]]; then
-                [[ -d "${srcdir}/${file_name}" ]] || mkdir -p "${srcdir}/${file_name}"
-                git --git-dir="${workspace}/${file_name}" --work-tree="${srcdir}/${file_name}" pull
+                msg2 "updating ${file_name} from ${url} with git..."
+                git --git-dir="${workspace}/${file_name}" fetch --all
             else
-                git clone --bare "${url##git+}" "${workspace}/${file_name}"
+                msg2 "cloning ${file_name} from ${url} with git..."
+                git clone --mirror "${url##git+}" "${workspace}/${file_name}"
             fi
             ;;
-        "http"|"https")
+        "http"|"https"|"ftp"|"ftps")
             if (( ! OVERRIDE_SOURCE )) && [[ -f "${workspace}/${file_name}" ]] ; then
                 msg2 "${file_name} already exists, skip download"
             else
+                msg2 "retriving ${file_name} from ${url} with curl..."
                 curl --location "${url}" --output "${workspace}/${file_name}"
             fi
             ;;
+        "file")
+            if [[ -e "${workspace}/${url}" ]] ; then
+                msg2 "found local file: ${url}"
+            else
+                err "local file not found: ${url}"
+                err "Aborting..."
+                exit 1
+            fi
+            ;;
+        *)
+            err "retriving url as type ${url_type} not supported"
+            err "Aborting..."
+            exit 1
     esac
 }
 
@@ -155,7 +174,8 @@ function extract_source_single {
     case "${url_type}" in
         "git")
             local restore_source=HEAD
-            git --git-dir "${workspace}/${file_name}" --work-tree="${srcdir}" restore --source="${restore_source}" .
+            [[ -d "${srcdir}/${file_name}" ]] || mkdir -p "${srcdir}/${file_name}"
+            git --git-dir "${workspace}/${file_name}" --work-tree="${srcdir}/${file_name}" restore --source="${restore_source}" .
             ;;
         "file") # for material files, just soft-link under src
             create_soft_link $(realpath "${workspace}/${url}") "${srcdir}/${file_name}"
