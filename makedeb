@@ -124,6 +124,15 @@ function create_soft_link {
     ln --symbolic "${src}" "${tgt}"
 }
 
+function url_fragment {
+    local url="$1"
+    local fragment="${url#*#}"
+    if [[ "${url}" == "${fragment}" ]] ; then
+        return
+    fi
+    echo "${fragment}"
+}
+
 # $1 is relative path to file
 # $2 is url/(relative path to materials)
 function retrive_source_single {
@@ -137,7 +146,9 @@ function retrive_source_single {
                 git --git-dir="${workspace}/${file_name}" fetch --all
             else
                 msg2 "cloning ${file_name} from ${url} with git..."
-                git clone --mirror "${url##git+}" "${workspace}/${file_name}"
+                local git_source="${url##git+}"
+                git_source="${git_source%%#*}"
+                git clone --mirror "${git_source}" "${workspace}/${file_name}"
             fi
             ;;
         "http"|"https"|"ftp"|"ftps")
@@ -173,9 +184,30 @@ function extract_source_single {
 
     case "${url_type}" in
         "git")
-            local restore_source=HEAD
             [[ -d "${srcdir}/${file_name}" ]] || mkdir -p "${srcdir}/${file_name}"
-            git --git-dir "${workspace}/${file_name}" --work-tree="${srcdir}/${file_name}" restore --source="${restore_source}" .
+
+            local ref=HEAD
+            local frag=$(url_fragment "${url}")
+            if [[ -n "${frag}" ]] ; then
+                case "${frag%%=*}" in
+                    "branch")
+                        ref="refs/heads/${frag##*=}"
+                        ;;
+                    "tag")
+                        ref="refs/tags/${frag##*=}"
+                        ;;
+                    "commit")
+                        ref="${frag##*=}"
+                        ;;
+                    *)
+                        err "unrecognized reference in git url: ${frag}"
+                        exit 1
+                        ;;
+                esac
+            fi
+
+            msg2 "extracting git ${workspace}/${file_name} with reference ${ref}"
+            git --git-dir "${workspace}/${file_name}" --work-tree="${srcdir}/${file_name}" restore --source="${ref}" .
             ;;
         "file") # for material files, just soft-link under src
             create_soft_link $(realpath "${workspace}/${url}") "${srcdir}/${file_name}"
@@ -205,11 +237,11 @@ function decompress_source_file {
         *.zip)
             cmd="unzip" ;;
         *)
-            msg2 "No need to decompress, skip %s" "${file}"
+            msg2 "no need to decompress, skip %s" "${file}"
             return
     esac
 
-    msg2 "Decompressing %s with %s" "${file}" "${cmd}"
+    msg2 "decompressing %s with %s" "${file}" "${cmd}"
     local res=0
     case "$cmd" in
         "tar")
@@ -320,8 +352,8 @@ elif is_function pkgver; then
 fi
 
 # recursive call self to run rest task in fakeroot
-msg "Entering fakeroot environment..."
+msg "entering fakeroot environment..."
 fakeroot -- bash -$- "${BASH_SOURCE[0]}" -F -OV "${pkgver}"  "${ARGLIST[@]}" || exit $?
-msg "Leaving fakeroot environment..."
+msg "leaving fakeroot environment..."
 
-msg "Builds has done"
+msg "builds has done"
