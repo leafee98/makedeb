@@ -1,7 +1,9 @@
 #/usr/bin/env bash
 
 pkgname="forgejo"
+pkgver=23333    # this will be override by pkgver function
 pkgrel=1
+pkgcommit=""
 pkgdesc="A painless selfhost git service."
 url="https://codeberg.org/forgejo/forgejo"
 maintainer="Leafee98 <me@leafee98.com>"
@@ -14,8 +16,9 @@ source=(
     "t.sh::material/t.sh"
 )
 
+# This will be run just follow extracting source
 function pkgver {
-    echo "0.0.2"
+    echo "1.19.0-2"
 }
 
 function build {
