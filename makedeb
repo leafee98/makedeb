@@ -280,31 +280,31 @@ function decompress_source_file {
 }
 
 error_function() {
-	# first exit all subshells, then print the error
-	if (( ! BASH_SUBSHELL )); then
-		error "A failure occurred in %s()." "$1"
-		plainerr "$(gettext "Aborting...")"
-	fi
-	exit $E_USER_FUNCTION_FAILED
+    # first exit all subshells, then print the error
+    if (( ! BASH_SUBSHELL )); then
+        error "A failure occurred in %s()." "$1"
+        plainerr "$(gettext "Aborting...")"
+    fi
+    exit $E_USER_FUNCTION_FAILED
 }
 
 # use less strict shell for custom functions
 function run_function_safe {
-	local restoretrap
+    local restoretrap
 
     set +o errtrace
     set +o errexit
 
-	restoretrap=$(trap -p ERR)
-	trap "error_function '$1'" ERR
+    restoretrap=$(trap -p ERR)
+    trap "error_function '$1'" ERR
 
-	"$1"
+    "$1"
 
     set -o errtrace
     set -o errexit
 
-	trap - ERR
-	eval "$restoretrap"
+    trap - ERR
+    eval "$restoretrap"
 }
 
 function is_function {
