@@ -228,7 +228,8 @@ function extract_source_single {
             fi
 
             msg2 "extracting git ${workspace}/${file_name} with reference ${ref}"
-            git --git-dir "${workspace}/${file_name}" --work-tree="${srcdir}/${file_name}" restore --source="${ref}" .
+            git clone --shared "${workspace}/${file_name}" "${srcdir}/${file_name}"
+            git -C "${srcdir}/${file_name}" switch --force-create makedeb --no-track "${ref}"
             ;;
         "file") # for material files, just soft-link under src
             create_soft_link $(realpath "${workspace}/${url}") "${srcdir}/${file_name}"
