@@ -93,11 +93,9 @@ function generate_deb {
     local control_tgz="${tmpdir}/control.tar.gz"
     local debian_binary="${tmpdir}/debian-binary"
 
-    find "${pkgdir}" -mindepth 1 -maxdepth 1 -not -path "${pkgdir}/DEBIAN*" -printf "%P\n" |
-        tar -czf "${data_tgz}" -C "${pkgdir}" -T -
+    tar --exclude="./DEBIAN" -C "${pkgdir}" -cf "${data_tgz}" .
 
-    find "${pkgdir}/DEBIAN" -mindepth 1 -maxdepth 1 -printf "%P\n" |
-        tar -czf "${control_tgz}" -C "${pkgdir}/DEBIAN" -T -
+    tar -C "${pkgdir}/DEBIAN" -cf "${control_tgz}" .
 
     echo 2.0 > "${debian_binary}"
 
