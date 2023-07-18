@@ -1,32 +1,57 @@
 #/usr/bin/env bash
 
-pkgname="forgejo"
-pkgver=23333    # this will be override by pkgver function
+pkgname="makedeb"
+pkgver=0.0.1.0.g34537bd
 pkgrel=1
 pkgcommit=""
 pkgdesc="A painless selfhost git service."
-url="https://codeberg.org/forgejo/forgejo"
+url="https://git.leafee98.com/leafee98/makedeb"
 maintainer="Leafee98 <me@leafee98.com>"
 
 source=(
-    "forgejo-1.19.0-2-linux-amd64.xz::https://codeberg.org/attachments/5f7f9d36-b85e-40db-b390-9bf39acbbbc5"
-    "bwifi::git+https://cgit.leafee98.com/bwifi.git/#commit=8af4243f622bcb52f2e5be3345e282fd7cbad4d0"
-    "frp-0.46.1.tar.gz::material/frp-0.46.1.tar.gz"
-    "pkg.zip::material/pkg.zip"
-    "t.sh::material/t.sh"
+    "LICENSE::https://git.leafee98.com/leafee98/makedeb/raw/branch/main/LICENSE"    # from http
+    "makedeb-repo::git+https://git.leafee98.com/leafee98/makedeb.git#branch=main"        # from git with https
+    "README.md::README.md"                                       # from local file
 )
 
-# This will be run just follow extracting source
+# This will be run just after extracting source, and re-assign to `pkgver`
+#
+# If extracting version from source is not needed, don't define this function.
 function pkgver {
-    echo "1.19.0-2"
+    git describe --tags --long | sed 's/^v//;s/-/./g'
 }
 
 function build {
-    install -D "${srcdir}/t.sh" "${pkgdir}/usr/bin/t.sh"
-    echo "building"
+    echo "Here should do something like compile sources."
+    echo "But for this package we just print some messages."
 }
 
 function package {
-    echo "installing package, pkgdir: ${pkgdir}"
+    install -Dm644 "${srcdir}/LICENSE" "${pkgdir}/usr/share/licenses/makedeb/LICENSE"
+    install -Dm755 "${srcdir}/makedeb-repo/makedeb" "${pkgdir}/usr/bin/makedeb"
+    install -Dm755 "${srcdir}/README.md" "${pkgdir}/usr/share/doc/makedeb/README.md"
 }
 
+# The function describing hook for (pre|post)(inst|rm) should
+# *print* content of those hook file.
+# If the any hook is not needed, don't define those function.
+
+#function debian_preinst {
+#}
+
+function debian_postinst {
+    cat << EOF
+#!/usr/bin/env bash
+echo "successfully installed makedeb"
+EOF
+}
+
+#function debian_prerm {
+#}
+
+function debian_postrm {
+    cat << EOF
+#!/usr/bin/env bash
+echo "successfully removed makedeb"
+EOF
+}
