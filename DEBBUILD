@@ -9,8 +9,8 @@ url="https://git.leafee98.com/leafee98/makedeb"
 maintainer="Leafee98 <me@leafee98.com>"
 
 source=(
-    "LICENSE::https://git.leafee98.com/leafee98/makedeb/raw/branch/main/LICENSE"    # from http
-    "makedeb-repo::git+https://git.leafee98.com/leafee98/makedeb.git#branch=main"        # from git with https
+    "LICENSE::https://git.leafee98.com/leafee98/makedeb/raw/branch/main/LICENSE"    # from http (existed file will skip, without checking hash)
+    "makedeb-repo::git+https://git.leafee98.com/leafee98/makedeb.git#branch=main"   # from git with https
     "README.md::README.md"                                       # from local file
 )
 
