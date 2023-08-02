@@ -1,9 +1,12 @@
 #/usr/bin/env bash
 
 pkgname="makedeb"
-pkgver=0.0.1.0.g34537bd
+pkgver=0.0.2.0.g175943a
 pkgrel=1
+arch="all"
 pkgcommit=""
+section="utils"             # https://www.debian.org/doc/debian-policy/ch-archive.html#s-subsections
+priority="optional"         # https://www.debian.org/doc/debian-policy/ch-archive.html#s-priorities
 pkgdesc="A painless selfhost git service."
 url="https://git.leafee98.com/leafee98/makedeb"
 maintainer="Leafee98 <me@leafee98.com>"

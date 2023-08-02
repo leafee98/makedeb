@@ -22,6 +22,8 @@ Every string in array `source` should be like `<actual_file_name>::<download_url
 - `pkgver`: package's version, if need to extract version from source, use function `pkgver`
 - `pkgrel`: debian package reference, it should increase by one every build
 - `pkgdesc`: package's description
+- `section`: default `misc` if not specified
+- `priority`: default `optional` if not specified
 - `url`: packages upstream url
 - `maintainer`: maintainer's contect information
 

@@ -75,14 +75,18 @@ function debian_control {
     local install_size="$(du --block-size=1K --summarize ${pkgdir} | cut -d $'\t' -f 1)"
     local fv="$(get_full_version)"
 
-    cat << EOF | envsubst
-Package: ${pkgname}
-Version: ${fv}
-Architecture: all
-Maintainer: ${maintainer}
-Installed-Size: ${install_size}
-Description: ${pkgdesc}
-EOF
+    echo "Package: ${pkgname}"
+    echo "Version: ${fv}"
+    echo "Architecture: ${arch}"
+    echo "Maintainer: ${maintainer}"
+    echo "Installed-Size: ${install_size}"
+    echo "Homepage: ${url}"
+
+    [[ -n "${section:=misc}" ]] && echo "Section: ${section}"
+    [[ -n "${priority:=optional}" ]] && echo "Priority: ${priority}"
+
+    echo "Description: ${pkgdesc}"
+
 }
 
 function generate_deb {
