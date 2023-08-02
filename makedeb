@@ -93,9 +93,9 @@ function generate_deb {
     local control_tgz="${tmpdir}/control.tar.gz"
     local debian_binary="${tmpdir}/debian-binary"
 
-    tar --exclude="./DEBIAN" -C "${pkgdir}" -cf "${data_tgz}" .
+    tar --gzip --exclude="./DEBIAN" -C "${pkgdir}" -cf "${data_tgz}" .
 
-    tar -C "${pkgdir}/DEBIAN" -cf "${control_tgz}" .
+    tar --gzip -C "${pkgdir}/DEBIAN" -cf "${control_tgz}" .
 
     echo 2.0 > "${debian_binary}"
 
