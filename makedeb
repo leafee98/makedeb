@@ -53,7 +53,7 @@ function msg2 {
 function err {
     (( QUIET )) && return 0
     local mesg=$1; shift
-    printf "${RED}  ->${ALL_OFF}${BOLD}${RED} ${mesg}${ALL_OFF}\n" "$@" >&2
+    printf "${RED}==>${ALL_OFF}${BOLD}${RED} ${mesg}${ALL_OFF}\n" "$@" >&2
 }
 
 function get_full_version {
@@ -158,7 +158,7 @@ function url_fragment {
 
 # $1 is relative path to file
 # $2 is url/(relative path to materials)
-function retrive_source_single {
+function retrieve_source_single {
     local file_name="$1"
     local url="$2"
 
@@ -178,7 +178,7 @@ function retrive_source_single {
             if (( ! OVERRIDE_SOURCE )) && [[ -f "${workspace}/${file_name}" ]] ; then
                 msg2 "${file_name} already exists, skip download"
             else
-                msg2 "retriving ${file_name} from ${url} with curl..."
+                msg2 "retrieving ${file_name} from ${url} with curl..."
                 curl --location "${url}" --output "${workspace}/${file_name}"
             fi
             ;;
@@ -192,7 +192,7 @@ function retrive_source_single {
             fi
             ;;
         *)
-            err "retriving url as type ${url_type} not supported"
+            err "retrieving url as type ${url_type} not supported"
             err "Aborting..."
             exit 1
     esac
@@ -335,7 +335,7 @@ function retrieve_source {
         file_name="${s%%::*}"
         url="${s##*::}"
 
-        retrive_source_single "${file_name}" "${url}"
+        retrieve_source_single "${file_name}" "${url}"
     done
 }
 
