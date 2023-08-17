@@ -6,10 +6,30 @@ buildfile="${workspace}/DEBBUILD"
 srcdir="${workspace}/src"
 pkgdir="${workspace}/pkg"
 
-FAKE_PACKAGE=0
+_IN_FAKEROOT=0
+_BACKUP_STDOUT=3        # use file descriptor 3 to backup stdout
+_BACKUP_STDERR=4        # use file descriptor 4 to backup stderr
+_ARGLIST=("$@")
 OVERRIDE_SOURCE=0
-SHOW_TARGET_FILE=0
 QUIET=0
+PACKAGELIST=0
+FORCE=0
+
+_STEP_CLEAN=1
+_STEP_RETRIEVE_SOURCE=1
+_STEP_EXTRACT_SOURCE=1
+_STEP_UPDATE_PKGVER=1
+_STEP_BUILD=1
+_STEP_PACKAGE=1
+_STEP_CREATE_ARCHIVE=1
+
+_STOP_AFTER_CLEAN=0
+_STOP_AFTER_RETRIEVE_SOURCE=0
+_STOP_AFTER_EXTRACT_SOURCE=0
+_STOP_AFTER_UPDATE_PKGVER=0
+_STOP_AFTER_BUILD=0
+_STOP_AFTER_PACKAGE=0
+_STOP_AFTER_CREATE_ARCHIVE=0
 
 set -o functrace
 set -o nounset
@@ -86,11 +106,24 @@ function debian_control {
     [[ -n "${priority:=optional}" ]] && echo "Priority: ${priority}"
 
     echo "Description: ${pkgdesc}"
-
 }
 
+function generate_control {
+    msg "Generating control info..."
+    mkdir -p "${pkgdir}/DEBIAN"
+    echo 2 > "${pkgdir}/DEBIAN/compat"
+    debian_control > "${pkgdir}/DEBIAN/control"
+
+    function debian_hooks_warpper { is_function "$1" && "$1" > "$2" && chmod +x "$2" || true; }
+    debian_hooks_warpper debian_preinst  ${pkgdir}/DEBIAN/preinst
+    debian_hooks_warpper debian_postinst ${pkgdir}/DEBIAN/postinst
+    debian_hooks_warpper debian_prerm    ${pkgdir}/DEBIAN/prerm
+    debian_hooks_warpper debian_postrm   ${pkgdir}/DEBIAN/postrm
+}
+
+
 function generate_deb {
-    msg "generating deb package..."
+    msg "Generating deb package..."
 
     local tmpdir="$(mktemp --directory)"
     local data_tgz="${tmpdir}/data.tar.gz"
@@ -107,7 +140,12 @@ function generate_deb {
 
     rm -rf "${tmpdir}"
 
-    msg2 "generated deb: %s" "$(get_deb_name)"
+    msg2 "Generated deb: %s" "$(get_deb_name)"
+}
+
+function step_create_archive {
+    generate_control
+    generate_deb
 }
 
 function url_type {
@@ -138,10 +176,12 @@ function create_soft_link {
 
     if [[ ! -e "${src}" ]] ; then
         err "soft_link src %s not exist" "${src}"
+        return 1
     fi
 
     if [[ -e "${tgt}" ]] ; then
         err "soft_link tgt %s already exist" "${tgt}"
+        return 1
     fi
 
     ln --symbolic "${src}" "${tgt}"
@@ -165,10 +205,10 @@ function retrieve_source_single {
     case "$(url_type "${url}")" in
         "git")
             if [[ -d "${file_name}" ]]; then
-                msg2 "updating ${file_name} from ${url} with git..."
+                msg2 "Updating ${file_name} from ${url} with git..."
                 git --git-dir="${workspace}/${file_name}" fetch --all
             else
-                msg2 "cloning ${file_name} from ${url} with git..."
+                msg2 "Cloning ${file_name} from ${url} with git..."
                 local git_source="${url##git+}"
                 git_source="${git_source%%#*}"
                 git clone --mirror "${git_source}" "${workspace}/${file_name}"
@@ -178,21 +218,21 @@ function retrieve_source_single {
             if (( ! OVERRIDE_SOURCE )) && [[ -f "${workspace}/${file_name}" ]] ; then
                 msg2 "${file_name} already exists, skip download"
             else
-                msg2 "retrieving ${file_name} from ${url} with curl..."
+                msg2 "Retrieving ${file_name} from ${url} with curl..."
                 curl --location "${url}" --output "${workspace}/${file_name}"
             fi
             ;;
         "file")
             if [[ -e "${workspace}/${url}" ]] ; then
-                msg2 "found local file: ${url}"
+                msg2 "Found local file: ${url}"
             else
-                err "local file not found: ${url}"
+                err "Local file not found: ${url}"
                 err "Aborting..."
                 exit 1
             fi
             ;;
         *)
-            err "retrieving url as type ${url_type} not supported"
+            err "Retrieving url as type ${url_type} not supported"
             err "Aborting..."
             exit 1
     esac
@@ -229,7 +269,7 @@ function extract_source_single {
                 esac
             fi
 
-            msg2 "extracting git ${workspace}/${file_name} with reference ${ref}"
+            msg2 "Extracting git ${workspace}/${file_name} with reference ${ref}"
             git clone --shared "${workspace}/${file_name}" "${srcdir}/${file_name}"
             git -C "${srcdir}/${file_name}" switch --force-create makedeb --no-track "${ref}"
             ;;
@@ -261,11 +301,11 @@ function decompress_source_file {
         *.zip)
             cmd="unzip" ;;
         *)
-            msg2 "no need to decompress, skip %s" "${file}"
+            msg2 "No need to decompress, skip %s" "${file}"
             return
     esac
 
-    msg2 "decompressing %s with %s" "${file}" "${cmd}"
+    msg2 "Decompressing %s with %s" "${file}" "${cmd}"
     local res=0
     case "$cmd" in
         "tar")
@@ -323,14 +363,14 @@ function check_source_validation {
     done
 }
 
-function clean_dir {
-    msg "cleaning \$srcdir and \$pkgdir..."
+function step_clean_dir {
+    msg "Cleaning \$srcdir and \$pkgdir..."
     rm -rf "${srcdir}" "${pkgdir}"
     mkdir -p "${srcdir}" "${pkgdir}"
 }
 
-function retrieve_source {
-    msg "retrieving source..."
+function step_retrieve_source {
+    msg "Retrieving source..."
     for s in "${source[@]}"; do
         file_name="${s%%::*}"
         url="${s##*::}"
@@ -339,8 +379,8 @@ function retrieve_source {
     done
 }
 
-function extract_source {
-    msg "extracting source..."
+function step_extract_source {
+    msg "Extracting source..."
     for s in "${source[@]}"; do
         file_name="${s%%::*}"
         url="${s##*::}"
@@ -349,12 +389,12 @@ function extract_source {
     done
 }
 
-function update_pkgver {
+function step_update_pkgver {
     if ! is_function pkgver; then
         return
     fi
 
-    msg "updating pkgver..."
+    msg "Updating pkgver..."
     newpkgver="$(run_function_safe pkgver)"
     if [[ "${newpkgver}" != "${pkgver:-}" ]] ; then
         mapfile -t bfcontent < "${buildfile}"
@@ -371,33 +411,34 @@ function update_pkgver {
 
         source "${buildfile}"
 
-        msg2 "updated version: ${newpkgver}"
+        msg2 "Updated version: ${newpkgver}"
     fi
 
     pkgver="${newpkgver}"
 }
 
-function generate_control {
-
-    msg "generating control info..."
-    mkdir -p "${pkgdir}/DEBIAN"
-    echo 2 > "${pkgdir}/DEBIAN/compat"
-    debian_control > "${pkgdir}/DEBIAN/control"
-
-    function debian_hooks_warpper { is_function "$1" && "$1" > "$2" && chmod +x "$2" || true; }
-    debian_hooks_warpper debian_preinst  ${pkgdir}/DEBIAN/preinst
-    debian_hooks_warpper debian_postinst ${pkgdir}/DEBIAN/postinst
-    debian_hooks_warpper debian_prerm    ${pkgdir}/DEBIAN/prerm
-    debian_hooks_warpper debian_postrm   ${pkgdir}/DEBIAN/postrm
-}
-
 function run_function {
     if is_function "$1" ; then
-        msg "run function: $1"
+        msg "Run function: $1"
         run_function_safe "$1"
     fi
 }
 
+function disable_stdout {
+    exec {_BACKUP_STDOUT}>&1
+    exec 1>/dev/null
+}
+
+function enable_stdout {
+    exec 1>&"$_BACKUP_STDOUT"
+}
+
+function show_help {
+    echo "$0 [OPTIONS]"
+    echo "    -OS   override source"
+    echo "    -STF  show the filename to be generated"
+    echo "    -Q    quiet, disable log"
+}
 
 ##
 ## Here start the build logic
@@ -405,11 +446,36 @@ function run_function {
 
 while (( "$#" >= 1 )); do
     case "$1" in
-        -F)  FAKE_PACKAGE=1 ;;
-        -OS) OVERRIDE_SOURCE=1 ;;
-        -STF) SHOW_TARGET_FILE=1 ; QUIET=1 ;;
-        -Q) QUIET=1 ;;
-        *)   err "Unkown option $1"; break ;;
+        -F)                         _IN_FAKEROOT=1 ;;
+        -OS|--override-source)      OVERRIDE_SOURCE=1 ;;
+        -Q)                         QUIET=1 ;;
+        -f|--force)                 FORCE=1 ;;
+        --noextract)
+            _STEP_CLEAN=0
+            _STEP_RETRIEVE_SOURCE=0
+            _STEP_EXTRACT_SOURCE=0
+            _STEP_UPDATE_PKGVER=0
+            ;;
+        --nobuild)
+            _STEP_BUILD=0
+            _STEP_PACKAGE=0
+            _STEP_CREATE_ARCHIVE=0
+
+            _STOP_AFTER_UPDATE_PKGVER=1
+            ;;
+        --noarchive)
+            _STEP_CREATE_ARCHIVE=0
+
+            _STOP_AFTER_BUILD=1
+            ;;
+        --packagelist)
+            PACKAGELIST=1
+            ;;
+        -h|--help) show_help ; exit 0;;
+
+        *)  err "Unkown option $1"
+            err "Use $0 --help for help"
+            exit 1 ;;
     esac
     shift
 done
@@ -417,39 +483,65 @@ done
 source "${buildfile}"
 
 
-if (( ! FAKE_PACKAGE )) ; then
-    if (( SHOW_TARGET_FILE )) && ! is_function pkgver ; then
-        echo "$(get_deb_name)"
-        exit 0
-    fi
+if (( PACKAGELIST )) ; then
+    echo "$(get_deb_name)"
+    exit 0
+fi
 
+if (( QUIET )) ; then
+    disable_stdout
+fi
+
+if (( ! _IN_FAKEROOT )) ; then
     check_source_validation
 
-    clean_dir
-
-    retrieve_source
-
-    extract_source
-
-    update_pkgver
-
-    if (( SHOW_TARGET_FILE )) && is_function pkgver ; then
-        echo "$(get_deb_name)"
-        exit 0
+    if (( _STEP_CLEAN )) ; then
+        step_clean_dir
     fi
 
-    run_function build
+    if (( _STEP_RETRIEVE_SOURCE )) ; then
+        step_retrieve_source
+    fi
 
-    # recursive call self to run rest task in fakeroot
-    msg "entering fakeroot environment..."
-    fakeroot -- bash -$- "${BASH_SOURCE[0]}" -F "${ARGLIST[@]}" || exit $?
-    msg "leaving fakeroot environment..."
+    if (( _STEP_EXTRACT_SOURCE )) ; then
+        step_extract_source
+    fi
 
-    msg "builds has done"
+    if (( _STEP_UPDATE_PKGVER )) ; then
+        step_update_pkgver
+        (( _STOP_AFTER_UPDATE_PKGVER )) && msg "Sources are ready."
+    fi
+
+    # Check if the package already exists
+    if (( ! FORCE )) ; then
+        if [[ -f "$(get_deb_name)" ]] ; then
+            err "The package already exists. (use -f to force build)"
+            exit 13
+        fi
+    fi
+
+    if (( _STEP_BUILD )) ; then
+        run_function build
+        (( _STOP_AFTER_BUILD )) && msg "Package directory is ready."
+    fi
+
+    if (( _STEP_PACKAGE || _STEP_CREATE_ARCHIVE )) ; then
+        # recursive call self to run rest task in fakeroot
+        msg "Entering fakeroot environment..."
+        fakeroot -- bash -$- "${BASH_SOURCE[0]}" -F "${_ARGLIST[@]}" || exit $?
+        msg "Leaving fakeroot environment..."
+    fi
 else
-    run_function package
+    if (( _STEP_PACKAGE )) ; then
+        run_function package
+    fi
 
-    generate_control
+    if (( _STEP_CREATE_ARCHIVE )) ; then
+        step_create_archive
+        msg "Finish making: $(get_deb_name) $(date)"
+    fi
+fi
 
-    generate_deb
+if (( QUIET )) ; then
+    enable_stdout
 fi
