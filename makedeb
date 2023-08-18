@@ -438,6 +438,7 @@ function show_help {
     echo "$0 [OPTIONS]"
     echo "      -Q              quiet, disable log"
     echo "      -f|--force      don't check if package already exists, will"
+    echo "      --nobuild       retrieve source, update pkgver and stop"
     echo "                      override the existed package"
     echo "      --noextract     use the current srcdir to build package, skip"
     echo "                      those retrieve source steps"
